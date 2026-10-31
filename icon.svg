@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Git history panel">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3f5efb" />
+      <stop offset="1" stop-color="#8f4bf7" />
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#g)" />
+  <g fill="none" stroke="#ffffff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="22" cy="17" r="4.6" />
+    <circle cx="22" cy="47" r="4.6" />
+    <circle cx="43" cy="30" r="4.6" />
+    <path d="M22 21.6v20.8" />
+    <path d="M43 34.6c0 7.4-6.6 8.4-16.2 10.2" />
+  </g>
+</svg>

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session Git",
+    "description": "Git history for each DSH session: the conversation opens its own repository at the session working directory, with branch lanes, commit detail, diffs, refs and working-tree operations."
+  }
+}

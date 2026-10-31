@@ -1,0 +1,75 @@
+{
+  "name": "dsh-session-git",
+  "version": "1.1.0",
+  "description": "Git history as a tab inside each DSH conversation: the session opens its own repository, with branch lanes, commit detail, diffs, refs and working-tree operations.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek",
+    "deepseek-harness",
+    "cordis",
+    "git",
+    "git-graph",
+    "commit-graph",
+    "diff",
+    "version-control"
+  ],
+  "author": "DenKoI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/koi128bit/dsh-session-git.git"
+  },
+  "homepage": "https://github.com/koi128bit/dsh-session-git#readme",
+  "bugs": {
+    "url": "https://github.com/koi128bit/dsh-session-git/issues"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2.0-rc.1 <0.2.1-0 || >=0.2.1-rc.1 <0.3.0-0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-client-ui-conversation": ">=0.2.0-rc.1 <0.2.1-0 || >=0.2.1-rc.1 <0.3.0-0",
+    "@deepseek-ai/schemastery": ">=3.18.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-client-ui-conversation": {
+      "optional": true
+    },
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "assets/*.png",
+    "screenshots.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  }
+}
