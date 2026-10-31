@@ -40,15 +40,26 @@ neither remembers what the other picked.
 
 ## Install
 
+`dsh plugin` forwards its arguments to pnpm inside the profile directory, so install from
+this repository:
+
 ```sh
-dsh plugin --profile <profile> add dsh-session-git
+dsh plugin --profile <profile> add github:koi128bit/dsh-session-git
 ```
 
-Or install straight from a checkout:
+Or from a local checkout:
 
 ```sh
-git clone <this repository>
-dsh plugin --profile <profile> add <path-to-checkout>
+git clone https://github.com/koi128bit/dsh-session-git
+dsh plugin --profile <profile> add ./dsh-session-git
+```
+
+There is also a prebuilt tarball attached to
+[Releases](https://github.com/koi128bit/dsh-session-git/releases/latest/download/dsh-session-git.tgz),
+which skips the build step:
+
+```sh
+dsh plugin --profile <profile> add https://github.com/koi128bit/dsh-session-git/releases/latest/download/dsh-session-git.tgz
 ```
 
 Reload the web UI and open any conversation: a **Git** tab appears in the conversation
