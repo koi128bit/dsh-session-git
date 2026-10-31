@@ -25,6 +25,7 @@
     "url": "https://github.com/koi128bit/dsh-session-git/issues"
   },
   "type": "module",
+  "icon": "./icon.svg",
   "engines": {
     "node": ">=22",
     "dsh": ">=0.2.0-rc.1 <0.2.1-0 || >=0.2.1-rc.1 <0.3.0-0"
