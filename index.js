@@ -1,16 +1,16 @@
 /**
  * Host half of dsh-session-git.
  *
- * 在 DSH Web 同源下挂一组只读为主、写操作显式放行的 Git API：
- *   GET  /git-panel/api/status     仓库摘要（分支、ahead/behind、工作区计数）
- *   GET  /git-panel/api/log        提交列表（父提交、refs、作者、时间、标题）
- *   GET  /git-panel/api/branches   本地/远程分支 + 标签 + HEAD
- *   GET  /git-panel/api/commit     单提交详情（元信息 + 文件级增删行数）
- *   GET  /git-panel/api/diff       单提交或工作区某文件的 unified diff
- *   GET  /git-panel/api/working    工作区/暂存区变更清单
- *   GET  /git-panel/api/fs         目录浏览，用于仓库选择器
- *   GET  /git-panel/api/repos      在目录下递归找工作树
- *   POST /git-panel/api/action     checkout / branch / tag / merge / stash …
+ * 通过 DSH Connection 注册一组只读为主、写操作显式放行的 Git API：
+ *   GET  /api/git-panel/status     仓库摘要（分支、ahead/behind、工作区计数）
+ *   GET  /api/git-panel/log        提交列表（父提交、refs、作者、时间、标题）
+ *   GET  /api/git-panel/branches   本地/远程分支 + 标签 + HEAD
+ *   GET  /api/git-panel/commit     单提交详情（元信息 + 文件级增删行数）
+ *   GET  /api/git-panel/diff       单提交或工作区某文件的 unified diff
+ *   GET  /api/git-panel/working    工作区/暂存区变更清单
+ *   GET  /api/git-panel/fs         目录浏览，用于仓库选择器
+ *   GET  /api/git-panel/repos      在目录下递归找工作树
+ *   POST /api/git-panel/action     checkout / branch / tag / merge / stash …
  *
  * 所有命令都走 ctx.subprocess（缺失时退回 node:child_process），
  * 不接受任何来自前端的 shell 字符串拼装：参数一律走 argv。
@@ -20,14 +20,14 @@
  * 所以每个会话看到的是它自己的工作目录仓库。
  */
 import { execFile } from 'node:child_process'
-import { existsSync, statSync } from 'node:fs'
+import { existsSync, realpathSync, statSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { homedir } from 'node:os'
 
 export const name = 'dsh-session-git'
 
-const BASE = '/git-panel/api'
+const BASE = '/api/git-panel'
 const GIT_TIMEOUT_MS = 30_000
 const MAX_DIFF_BYTES = 2 * 1024 * 1024
 const MAX_LOG_BYTES = 8 * 1024 * 1024
@@ -179,7 +179,7 @@ async function runGit(ctx, cwd, args, input) {
 async function readJson(req) {
   const chunks = []
   let size = 0
-  for await (const chunk of req) {
+  for await (const chunk of req.body ?? []) {
     size += chunk.length
     if (size > 1024 * 1024) throw new Error('请求体过大')
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
@@ -188,12 +188,6 @@ async function readJson(req) {
   const text = Buffer.concat(chunks).toString('utf8').trim()
   if (!text) return {}
   return JSON.parse(text)
-}
-
-function isSameSite(req) {
-  const site = String(req.headers['sec-fetch-site'] ?? '').toLowerCase()
-  if (site && site !== 'same-origin' && site !== 'none') return false
-  return true
 }
 
 /** 展开 ~ 并解析为绝对路径。 */
@@ -208,12 +202,20 @@ function expandPath(input) {
 /** 白名单校验：空数组表示不限。 */
 function withinAllowed(path, allowedRoots) {
   if (!allowedRoots || allowedRoots.length === 0) return true
+  let target
+  try {
+    target = realpathSync(path)
+  } catch {
+    return false
+  }
   return allowedRoots.some((root) => {
-    const base = expandPath(root)
-    if (!base) return false
-    if (path === base) return true
-    const rel = relative(base, path)
-    return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+    try {
+      const base = realpathSync(expandPath(root))
+      const rel = relative(base, target)
+      return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel))
+    } catch {
+      return false
+    }
   })
 }
 
@@ -266,6 +268,9 @@ async function resolveRepo(ctx, config, requestPath, sessionId) {
     top = (await runGit(ctx, candidate, ['rev-parse', '--show-toplevel'])).trim()
   } catch (error) {
     throw new Error(`不是 Git 仓库：${cleanGitMessage(error?.message ?? error)}`)
+  }
+  if (!withinAllowed(top || candidate, config.allowedRoots)) {
+    throw new Error(`仓库根目录不在允许范围内：${top || candidate}`)
   }
   return top || candidate
 }
@@ -362,7 +367,7 @@ async function detectRepos(ctx, config, sessionId) {
   ].filter(Boolean)
 
   const candidates = []
-  if (sessionCwd && existsSync(sessionCwd) && statSync(sessionCwd).isDirectory()) {
+  if (sessionCwd && withinAllowed(sessionCwd, config.allowedRoots) && existsSync(sessionCwd) && statSync(sessionCwd).isDirectory()) {
     // 先问 git 自己：会话目录可能是仓库里的某个子目录（比如 <repo>/src），
     // 这种情况 rev-parse 能一路找到仓库根，比只看 .git 存在与否准。
     try {
@@ -379,7 +384,7 @@ async function detectRepos(ctx, config, sessionId) {
   }
   for (const dir of fallbacks) {
     if (candidates.some((item) => item.repo === dir)) continue
-    if (!existsSync(dir) || !statSync(dir).isDirectory()) continue
+    if (!withinAllowed(dir, config.allowedRoots) || !existsSync(dir) || !statSync(dir).isDirectory()) continue
     try {
       const top = (await runGit(ctx, dir, ['rev-parse', '--show-toplevel'])).trim()
       if (top) candidates.push({ repo: top, source: dir === fallbacks[0] ? 'config' : 'default' })
@@ -388,9 +393,10 @@ async function detectRepos(ctx, config, sessionId) {
     }
   }
 
+  const allowed = candidates.filter((item) => withinAllowed(item.repo, config.allowedRoots))
   const repos = []
-  for (const item of candidates) if (!repos.includes(item.repo)) repos.push(item.repo)
-  const head = candidates[0]
+  for (const item of allowed) if (!repos.includes(item.repo)) repos.push(item.repo)
+  const head = allowed[0]
   return { repo: head?.repo ?? '', repos, source: head?.source ?? '', sessionCwd }
 }
 
@@ -575,42 +581,35 @@ function toPaths(payload) {
 export function apply(ctx, config) {
   const resolved = { ...DEFAULTS, ...(config ?? {}) }
 
-  // 只硬依赖 webServer；subprocess / workingDirectory 走 ctx.get 可选访问，缺失时各自降级。
-  ctx.inject(['webServer'], (host) => {
+  // 使用 Connection 的认证与请求信任边界；缺失服务时不开放 Git 路由。
+  ctx.inject(['connection'], (host) => {
     host.effect(() => {
       const disposers = []
       let closed = false
 
-      const sendJson = (res, status, payload) => {
-        res.writeHead(status, {
-          'content-type': 'application/json; charset=utf-8',
-          'cache-control': 'no-store',
-        })
-        res.end(JSON.stringify(payload))
-      }
+      const sendJson = (status, payload) => Response.json(payload, {
+        status,
+        headers: { 'cache-control': 'no-store' },
+      })
 
       /** 统一的 GET 包装：解析 repo、跑 loader、兜错误。 */
       const route = (path, loader) => {
         disposers.push(
-          host.webServer.register({
-            kind: 'exact',
+          host.connection.fetch.register({
             path: `${BASE}${path}`,
-            handler: async (req, res) => {
+            methods: ['GET'],
+            requestBody: 'buffered',
+            fetch: async (req) => {
               if (closed) {
-                sendJson(res, 503, { ok: false, error: 'plugin disposed' })
-                return
+                return sendJson(503, { ok: false, error: 'plugin disposed' })
               }
-              if (!isSameSite(req)) {
-                sendJson(res, 403, { ok: false, error: 'cross-site request rejected' })
-                return
-              }
-              const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+              const url = new URL(req.url)
               try {
                 const payload = await loader(url.searchParams, req)
-                sendJson(res, 200, { ok: true, ...payload })
+                return sendJson(200, { ok: true, ...payload })
               } catch (error) {
                 runtime.lastError = String(error?.message ?? error)
-                sendJson(res, 400, { ok: false, error: cleanGitMessage(runtime.lastError) })
+                return sendJson(400, { ok: false, error: cleanGitMessage(runtime.lastError) })
               }
             },
           }),
@@ -850,21 +849,16 @@ export function apply(ctx, config) {
 
       // 写操作统一入口：一次一个动作，失败原样回吐 git 的 stderr。
       disposers.push(
-        host.webServer.register({
-          kind: 'exact',
+        host.connection.fetch.register({
           path: `${BASE}/action`,
-          handler: async (req, res) => {
+          methods: ['POST'],
+          requestBody: 'streaming',
+          fetch: async (req) => {
             if (closed) {
-              sendJson(res, 503, { ok: false, error: 'plugin disposed' })
-              return
-            }
-            if (!isSameSite(req)) {
-              sendJson(res, 403, { ok: false, error: 'cross-site request rejected' })
-              return
+              return sendJson(503, { ok: false, error: 'plugin disposed' })
             }
             if (!resolved.allowWrite) {
-              sendJson(res, 403, { ok: false, error: '写操作已在插件配置里关闭' })
-              return
+              return sendJson(403, { ok: false, error: '写操作已在插件配置里关闭' })
             }
             try {
               const payload = await readJson(req)
@@ -897,20 +891,20 @@ export function apply(ctx, config) {
               } else {
                 output = await writeAction(ctx, repo, builder(payload))
               }
-              sendJson(res, 200, { ok: true, output })
+              return sendJson(200, { ok: true, output })
             } catch (error) {
               runtime.lastError = String(error?.message ?? error)
-              sendJson(res, 400, { ok: false, error: cleanGitMessage(runtime.lastError) })
+              return sendJson(400, { ok: false, error: cleanGitMessage(runtime.lastError) })
             }
           },
         }),
       )
 
-      return () => {
+      return async () => {
         closed = true
         for (const dispose of disposers.reverse()) {
           try {
-            dispose()
+            await dispose()
           } catch {
             /* 已移除 */
           }

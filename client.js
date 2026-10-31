@@ -4,7 +4,7 @@
  * 注册成会话内的一个 View 页签（slot `conversation.view`，id = 'git'）：
  * 每个会话各有一份，仓库默认取该会话自己的工作目录；
  * 左侧是带 lane 曲线的提交历史，右侧是提交详情 / diff / 工作区变更，
- * 上方是仓库选择器与分支、标签操作。所有数据都走 Host 的 /git-panel/api，
+ * 上方是仓库选择器与分支、标签操作。所有数据都走 Host 的 /api/git-panel，
  * 请求统一带 `session=<sessionId>`，由 Host 侧解析成该会话的仓库。
  */
 window.__ModuleLoader__.load({
@@ -16,7 +16,7 @@ window.__ModuleLoader__.load({
 
     const NS = 'gitPanel'
     const VIEW_ID = 'git'
-    const API = '/git-panel/api'
+    const API = '/api/git-panel'
     /** 每个会话各自记住自己的仓库；key 后面拼 sessionId。 */
     const REPO_PREFIX = 'dsh-git-panel:repo'
     const ROW_H = 30
